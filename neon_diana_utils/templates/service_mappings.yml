@@ -755,3 +755,238 @@ ww-snowboy:
                 ports:
                   - containerPort: 8000
             restartPolicy: Always
+
+# Klat
+klat-observer:
+  container_image: &image_klat_observer ghcr.io/neongeckocom/klatchat_observer:dev
+  container_name: &name_klat_observer klat-observer
+  service_class: klat
+  mq:
+    mq_service_name: chat_observer
+    mq_username: chat_observer
+    mq_user_permissions:
+      chat_observer:
+        /chatbots:
+          read: .*
+          write: .*
+          configure: .*
+        /neon_chat_api:
+          read: ./*
+          write: ./*
+          configure: ./*
+    mq_vhosts:
+    - /chatbots
+    - /neon_chat_api
+  docker_compose:
+    container_name: *name_klat_observer
+    hostname: *name_klat_observer
+    image: *image_klat_observer
+    networks:
+      - klat-backend
+    depends_on:
+      - klat-server
+    restart: always
+    volumes:
+      - config:/config
+  kubernetes:
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          neon.diana.service: *name_klat_observer
+        name: *name_klat_observer
+      spec:
+        clusterIP: None
+        ports:
+          - name: headless
+            port: 55555
+            targetPort: 0
+        selector:
+          neon.diana.service: *name_klat_observer
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: *name_klat_observer
+        namespace: ${KLAT_NAMESPACE}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            neon.diana.service: *name_klat_observer
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              docker.network: klat-backend
+              neon.diana.service: *name_klat_observer
+              neon.project.name: klat
+          spec:
+            containers:
+              - image: *image_klat_observer
+                name: *name_klat_observer
+                volumeMounts:
+                  - mountPath: /config
+                    name: config
+            imagePullSecrets:
+              - name: github-auth
+            restartPolicy: Always
+            volumes:
+              - name: config
+                configMap:
+                  name: klat
+                  items:
+                    - key: config.json
+                      path: config.json
+klat-server:
+  conatiner_image: &image_klat_server ghcr.io/neongeckocom/chat_server:dev
+  container_name: &name_klat_server klat-server
+  service_class: klat
+  docker_compose:
+    container_name: *name_klat_server
+    hostname: *name_klat_server
+    image: *image_klat_server
+    networks:
+      - klat-backend
+    ports:
+      - 8010:8010
+    restart: always
+    volumes:
+      - config:/config
+    environment:
+      - HOST=klat-server
+      - PORT=8010
+  kubernetes:
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          neon.diana.service: *name_klat_server
+        name: *name_klat_server
+      spec:
+        type: ClusterIP
+        ports:
+          - name: "klat-server"
+            port: 8010
+            targetPort: 8010
+            protocol: TCP
+        selector:
+          neon.diana.service: *name_klat_server
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: *name_klat_server
+        namespace: ${KLAT_NAMESPACE}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            neon.diana.service: *name_klat_server
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              docker.network: klat-backend
+              neon.diana.service: *name_klat_server
+              neon.project.name: klat
+          spec:
+            containers:
+              - image: *image_klat_server
+                name: *name_klat_server
+                ports:
+                  - containerPort: 8010
+                volumeMounts:
+                  - mountPath: /config
+                    name: config
+                env:
+                  - name: HOST
+                    value: localhost
+                  - name: PORT
+                    value: "8010"
+            imagePullSecrets:
+              - name: github-auth
+            restartPolicy: Always
+            volumes:
+              - name: config
+                configMap:
+                  name: klat
+                  items:
+                    - key: config.json
+                      path: config.json
+klat-client:
+  container_image: &image_klat_client ghcr.io/neongeckocom/chat_client:dev
+  container_name: &name_klat_client klat-client
+  service_class: klat
+  docker_compose:
+    container_name: *name_klat_client
+    hostname: *name_klat_client
+    image: *image_klat_client
+    networks:
+      - klat-backend
+    ports:
+      - 8001:8001
+    restart: always
+    volumes:
+      - config:/config
+    environment:
+      - HOST=klat-client
+      - PORT=8001
+  kubernetes:
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          neon.diana.service: *name_klat_client
+        name: *name_klat_client
+      spec:
+        type: ClusterIP
+        ports:
+          - name: "klat-client"
+            port: 8001
+            targetPort: 8001
+            protocol: TCP
+        selector:
+          neon.diana.service: *name_klat_client
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: *name_klat_client
+        namespace: ${KLAT_NAMESPACE}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            neon.diana.service: *name_klat_client
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              docker.network: klat-backend
+              neon.diana.service: *name_klat_client
+              neon.project.name: klat
+          spec:
+            containers:
+              - image: *image_klat_client
+                name: *name_klat_client
+                ports:
+                  - containerPort: 8001
+                env:
+                  - name: HOST
+                    value: localhost
+                  - name: PORT
+                    value: "8001"
+                volumeMounts:
+                  - mountPath: /config
+                    name: config
+            imagePullSecrets:
+              - name: github-auth
+            restartPolicy: Always
+            volumes:
+              - name: config
+                configMap:
+                  name: klat
+                  items:
+                    - key: config.json
+                      path: config.json

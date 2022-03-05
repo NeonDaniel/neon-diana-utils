@@ -24,16 +24,37 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE,  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import subprocess
 import ruamel.yaml as yaml
 
+from click import prompt
 from typing import Optional
-from os import getenv
+from os import getenv, makedirs
 from os.path import dirname, join, expanduser, isdir, isfile
 from neon_utils.logger import LOG
 from ruamel.yaml import YAML
 
-from neon_diana_utils.constants import Orchestrator
+
+def _encode_registry_secret(username: str, token: str,
+                            registry: str = "ghcr.io") -> dict:
+    """
+    Encode the specified authentication into data to include in a k8s secret
+    :param username: registry username
+    :param token: auth token or password associated with username
+    :param registry: registry to configure auth for
+    :returns: dict data to be included in an imagePullSecret
+    """
+    import base64
+    import json
+
+    auth_string = f"{username}:{token}"
+    encoded_auth = base64.b64encode(auth_string
+                                    .encode("utf-8")).decode("utf-8")
+    config = {"auths": {registry: {"auth": encoded_auth}}}
+    LOG.debug(json.dumps(config).replace(" ", ""))
+    encoded_config = base64.b64encode(json.dumps(config).replace(" ", "")
+                                      .encode("utf-8")).decode("utf-8")
+    secret_data = {".dockerconfigjson": encoded_config}
+    return secret_data
 
 
 def cli_make_rmq_config_map(input_path: str, output_path: str) -> str:
@@ -83,19 +104,55 @@ def cli_make_api_secret(input_path: str, output_path: str) -> str:
     return output_path
 
 
+def cli_make_registry_secret(username: str, token: str, output_path: str,
+                             registry: str = "ghcr.io") -> str:
+    """
+    Generate a Secret object for container pull
+    :param username: registry username to authenticate with
+    :param token: token or password associated with username
+    :param output_path: path to output directory
+    :param registry: container registry to authenticate (default ghcr.io)
+    :returns: path to output file
+    """
+    output_path = expanduser(output_path)
+    if not isdir(output_path):
+        makedirs(output_path)
+    output_file = join(output_path, "k8s_secret_github-auth.yml")
+    if isfile(output_file):
+        raise FileExistsError(f"File exists: {output_file}")
+
+    username = username or prompt(f"Enter username for {registry}")
+    token = token or prompt("Enter auth token")
+    secret_data = _encode_registry_secret(username, token, registry)
+    secret_spec = {
+        "kind": "Secret",
+        "type": "kubernetes.io/dockerconfigjson",
+        "apiVersion": "v1",
+        "metadata": {
+            "name": "github-auth" if registry == "ghcr.io" else "docker-auth"
+        },
+        "data": secret_data
+    }
+    with open(output_file, "w") as f:
+        YAML().dump(secret_spec, f)
+    return output_file
+
+
 def write_kubernetes_spec(k8s_config: list, output_path: Optional[str] = None,
-                          namespaces: dict = None):
+                          namespaces: dict = None,
+                          output_filename: str = "k8s_diana_backend.yml"):
     """
     Generates and writes a kubernetes.yml spec file according to the passed services
     :param k8s_config: list of k8s objects specified, usually read from service_mappings.yml
     :param output_path: path to write spec files to
+    :param output_filename: basename of kubernetes spec file to write
     :param namespaces: dict of placeholders to namespaces
     """
     namespaces = namespaces or dict()
     output_dir = expanduser(output_path) if output_path else \
         expanduser(getenv("NEON_CONFIG_PATH", "~/.config/neon"))
 
-    diana_spec_file = join(output_dir, "k8s_diana_backend.yml")
+    diana_spec_file = join(output_dir, output_filename)
     ingress_spec_file = join(output_dir, "k8s_ingress_nginx_mq.yml")
 
     # Write Diana services spec file
@@ -109,8 +166,11 @@ def write_kubernetes_spec(k8s_config: list, output_path: Optional[str] = None,
         f.seek(0)
         string_contents = f.read()
         for placeholder, replacement in namespaces.items():
-            string_contents = string_contents.replace(
-                '${' + placeholder + '}', replacement)
+            try:
+                string_contents = string_contents.replace(
+                    '${' + placeholder + '}', replacement)
+            except Exception as e:
+                LOG.error(e)
         f.seek(0)
         f.truncate(0)
         f.write(string_contents)

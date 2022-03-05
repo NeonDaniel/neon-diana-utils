@@ -1,0 +1,32 @@
+SIO_URL: &DOCKER_SERVER_URL "http://klat-server:8010"
+SOCKET_IO_SERVER_URL: &EXTERNAL_SOCKET_URL ${SOCKET_HTTP_URL}
+CHAT_CLIENT:
+  PROD:
+    SERVER_URL: *DOCKER_SERVER_URL
+    RUNTIME_CONFIG:
+      CHAT_SERVER_URL_BASE: *EXTERNAL_SOCKET_URL
+CHAT_SERVER:
+  PROD:
+    connection_properties: &MONGO_CONFIG
+      dialect: mongo
+      host: ${MONGO_DB_URL}
+      # mongo.2022.us
+      port: ${MONGO_DB_PORT}
+      # 9999
+      database: klatchat
+      username: ${MONGO_USER}
+      password: ${MONGO_PASS}
+    DEBUG: True
+    MINIFY: False
+    SERVER_IP: klat-server
+DATABASE_CONFIG:
+  PROD:
+    # TODO: Update pyklatchat to read this default from config
+    pyklatchat_3333: *MONGO_CONFIG
+MQ:
+# TODO: Make this configurable
+  server: mq.2022.us
+  users:
+    chat_observer:
+      user: chat_observer
+      password: Klatchat2021

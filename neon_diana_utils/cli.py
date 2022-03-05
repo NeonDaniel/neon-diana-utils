@@ -27,6 +27,7 @@
 import click
 
 from os import getenv
+from os.path import join
 from click_default_group import DefaultGroup
 
 from neon_diana_utils.constants import valid_mq_services, default_mq_services, Orchestrator
@@ -216,5 +217,52 @@ def make_api_secrets(path, output_path):
     try:
         output_path = cli_make_api_secret(path, output_path)
         click.echo(f"Generated outputs in {output_path}")
+    except Exception as e:
+        click.echo(e)
+
+
+@neon_diana_cli.command("configure-klat",
+                        help="Generate configuration for a Klat system")
+@click.option("--server", "-s",
+              help="Public URL of server to configure")
+@click.option("--mongo-url", "-m",
+              help="URL or IP Address of MongoDB")
+@click.option("--mongo-port",
+              help="port to use for MongoDB connection")
+@click.option("--user", "-u",
+              help="Username for MongoDB")
+@click.option("--password", "-p",
+              help="Password associated with MongoDB user")
+@click.option("--namespace", "-n",
+              help="Kubernetes namespace to configure services in.")
+@click.argument('output_path', default=join(getenv("NEON_CONFIG_DIR",
+                                                   "~/.config/neon"), "klat"))
+def configure_klat(server, mongo_url, mongo_port, user, password, namespace,
+                   output_path):
+    from neon_diana_utils.utils.klat import cli_configure_klat
+    try:
+        output_path = cli_configure_klat(output_path, server, mongo_url,
+                                         mongo_port, user, password, namespace)
+        click.echo(f"Generated outputs in {output_path}")
+    except Exception as e:
+        click.echo(e)
+
+
+@neon_diana_cli.command("create-auth-secret",
+                        help="Generate a secret for pulling private containers")
+@click.option("--user", "-u",
+              help="Username to authenticate")
+@click.option("--token", "--password", "-t", "-p",
+              help="Token or Password used to authenticate")
+@click.option("--registry", "-r", default="ghcr.io",
+              help="Container registry to authenticate to")
+@click.argument('output_path', default=getenv("NEON_CONFIG_DIR",
+                                              "~/.config/neon"))
+def create_auth_secret(user, token, registry, output_path):
+    from neon_diana_utils.utils.kubernetes_utils import cli_make_registry_secret
+    try:
+        output_file = cli_make_registry_secret(user, token,
+                                               output_path, registry)
+        click.echo(f"Generated output {output_file}")
     except Exception as e:
         click.echo(e)

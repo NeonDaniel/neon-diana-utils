@@ -365,9 +365,11 @@ def generate_backend_config(docker_compose_config: dict,
     :param namespaces: k8s namespaces to configure
     """
     # Generate docker-compose file
-    docker_compose_file = join(expanduser(config_path), "docker-compose.yml") if config_path else None
+    docker_compose_file = join(expanduser(config_path), "docker-compose.yml") \
+        if config_path else None
     write_docker_compose(docker_compose_config, docker_compose_file,
                          volume_driver, volumes)
 
     # Generate Kubernetes spec file
-    write_kubernetes_spec(kubernetes_config, config_path, namespaces)
+    write_kubernetes_spec(kubernetes_config, config_path, namespaces,
+                          "k8s_diana_backend.yml")

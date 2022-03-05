@@ -463,8 +463,74 @@ class TestKubernetesUtils(unittest.TestCase):
 
         shutil.rmtree(output_path)
 
+    def test_encode_registry_secret(self):
+        from neon_diana_utils.utils.kubernetes_utils import _encode_registry_secret
+        encoded = _encode_registry_secret("username", "123123adsfasdf123123")
+        valid_str = \
+            "eyJhdXRocyI6eyJnaGNyLmlvIjp7ImF1dGgiOiJkWE5sY201aGJXVTZNVEl6TVRJellXUnpabUZ6WkdZeE1qTXhNak09In19fQ=="
+
+        self.assertEqual(encoded, {".dockerconfigjson": valid_str})
+
     def test_convert_docker_compose(self):
         pass
+
+
+class TestKlatUtils(unittest.TestCase):
+    def test_build_klat_config(self):
+        from neon_diana_utils.utils.klat import build_klat_config
+        with self.assertRaises(ValueError):
+            build_klat_config('', '', '', 0, '', '')
+        with self.assertRaises(ValueError):
+            build_klat_config('', '', '', 0, 'user', '')
+        with self.assertRaises(ValueError):
+            build_klat_config('', '', '', 0, 'user', 'password')
+        valid_output_file = os.path.join(os.path.dirname(__file__), "klat",
+                                         "config.json")
+        self.assertEqual(build_klat_config(valid_output_file, "",
+                                           "mongo.test.test", 0,
+                                           "user", "password"),
+                         valid_output_file)
+        with self.assertRaises(FileExistsError):
+            build_klat_config(valid_output_file, '', '', 0, 'user', 'password')
+
+        with open(valid_output_file) as f:
+            valid_config = json.load(f)
+
+        valid_mongo_config = {
+            "database": "klatchat",
+            "dialect": "mongo",
+            "host": "mongo.test.test",
+            "port": 27017,
+            "username": "user",
+            "password": "password"
+        }
+
+        self.assertEqual(valid_config["SIO_URL"], "http://chat-server:8010")
+        self.assertEqual(valid_config["SOCKET_IO_SERVER_URL"],
+                         "http://localhost:8010")
+        self.assertEqual(valid_config["CHAT_CLIENT"]["PROD"]["SERVER_URL"],
+                         valid_config["SIO_URL"])
+        self.assertEqual(valid_config["CHAT_CLIENT"]["PROD"]["RUNTIME_CONFIG"],
+                         {"CHAT_SERVER_URL_BASE": "http://localhost:8010"})
+        self.assertEqual(valid_config["CHAT_SERVER"]["PROD"]
+                         ["connection_properties"], valid_mongo_config)
+        self.assertEqual(valid_config["DATABASE_CONFIG"]["PROD"]
+                         ["pyklatchat_3333"], valid_mongo_config)
+
+        os.remove(valid_output_file)
+
+    def test_get_klat_services_config(self):
+        from neon_diana_utils.utils.klat import _get_klat_services_config
+        compose, kubernetes = _get_klat_services_config()
+        self.assertIsInstance(compose, dict)
+        self.assertIsInstance(kubernetes, list)
+        self.assertEqual(len(compose), len(kubernetes)/2)
+        for service in compose.values():
+            self.assertTrue(all([x in service for x in
+                                 ("container_name", "image", "networks")]))
+        for service in kubernetes:
+            self.assertTrue(all([x in service for x in
+                                 ("apiVersion", "kind", "metadata", "spec")]))
 
 
 if __name__ == '__main__':
