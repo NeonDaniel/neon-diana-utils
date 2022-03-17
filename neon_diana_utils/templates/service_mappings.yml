@@ -866,7 +866,7 @@ klat-server:
       spec:
         type: ClusterIP
         ports:
-          - name: "klat-server"
+          - name: "klat-server-api"
             port: 8010
             targetPort: 8010
             protocol: TCP
@@ -901,7 +901,7 @@ klat-server:
                     name: config
                 env:
                   - name: HOST
-                    value: localhost
+                    value: 0.0.0.0
                   - name: PORT
                     value: "8010"
             imagePullSecrets:
@@ -974,7 +974,7 @@ klat-client:
                   - containerPort: 8001
                 env:
                   - name: HOST
-                    value: localhost
+                    value: 0.0.0.0
                   - name: PORT
                     value: "8001"
                 volumeMounts:
